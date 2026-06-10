@@ -1,0 +1,383 @@
+from pathlib import Path
+from tkinter import Tk
+from tkinter.filedialog import askopenfilename, askdirectory
+import re
+
+import pandas as pd
+import matplotlib.pyplot as plt
+from scipy.signal import find_peaks
+from adjustText import adjust_text
+
+
+def Spectrum():
+
+    def read_spectrum_file(file_path):
+        x_values = []
+        y_values = []
+
+        number_pattern = r"[+-]?\d+(?:[.,]\d+)?(?:[Ee][+-]?\d+)?"
+
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            lines = f.readlines()
+
+        has_begin_marker = any("Begin Spectral Data" in line for line in lines)
+        start_reading = not has_begin_marker
+
+        for line in lines:
+
+            if "Begin Spectral Data" in line:
+                start_reading = True
+                continue
+
+            if not start_reading:
+                continue
+
+            line = line.strip()
+
+            if not line:
+                continue
+
+            numbers = re.findall(number_pattern, line)
+
+            if len(numbers) >= 2:
+                try:
+                    x = float(numbers[0].replace(",", "."))
+                    y = float(numbers[1].replace(",", "."))
+
+                    x_values.append(x)
+                    y_values.append(y)
+
+                except ValueError:
+                    pass
+
+        if len(x_values) == 0:
+            return None
+
+        return pd.DataFrame({
+            "Wavelength": x_values,
+            "Signal": y_values
+        })
+
+    def choose_file(title):
+        root = Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+
+        file_path = askopenfilename(
+            title=title,
+            initialdir=Path.cwd()
+        )
+
+        root.destroy()
+
+        return file_path
+
+    def ask_yes_no(question):
+        answer = input(question)
+        return answer.lower() in ["o", "oui", "y", "yes"]
+
+    plt.rcParams.update({
+        "font.size": 22
+    })
+
+    colors = [
+        "black",
+        "red",
+        "blue",
+        "green",
+        "orange",
+        "purple",
+        "brown",
+        "magenta",
+        "cyan"
+    ]
+
+    fig, ax_left = plt.subplots()
+    ax_right = None
+
+    left_ylabel = input("Titre de l'axe Y gauche : ")
+
+    n_series_left = int(
+        input("Combien de séries veux-tu tracer sur l'axe Y gauche ? ")
+    )
+
+    show_peaks_left = ask_yes_no(
+        "Veux-tu afficher les peaks sur l'axe Y gauche ? (o/n) "
+    )
+
+    if show_peaks_left:
+        prominence_left = float(
+            input("Prominence minimale des peaks gauche ? Exemple 0.01 : ")
+        )
+    else:
+        prominence_left = None
+
+    right_choice = ask_yes_no(
+        "Veux-tu ajouter des séries sur l'axe Y droit ? (o/n) "
+    )
+
+    if right_choice:
+        ax_right = ax_left.twinx()
+        right_ylabel = input("Titre de l'axe Y droit : ")
+
+        n_series_right = int(
+            input("Combien de séries veux-tu tracer sur l'axe Y droit ? ")
+        )
+
+        show_peaks_right = ask_yes_no(
+            "Veux-tu afficher les peaks sur l'axe Y droit ? (o/n) "
+        )
+
+        if show_peaks_right:
+            prominence_right = float(
+                input("Prominence minimale des peaks droit ? Exemple 0.01 : ")
+            )
+        else:
+            prominence_right = None
+
+    else:
+        right_ylabel = None
+        n_series_right = 0
+        show_peaks_right = False
+        prominence_right = None
+
+    total_series = n_series_left + n_series_right
+    all_texts = []
+
+    def plot_series(axis, data, legend, color, show_peaks_axis, prominence_axis):
+
+        axis.plot(
+            data["Wavelength"],
+            data["Signal"],
+            linewidth=2,
+            color=color,
+            label=legend
+        )
+
+        if show_peaks_axis:
+
+            peaks, properties = find_peaks(
+                data["Signal"],
+                prominence=prominence_axis
+            )
+
+            if len(peaks) == 0:
+                return
+
+            peak_x = data["Wavelength"].iloc[peaks]
+            peak_y = data["Signal"].iloc[peaks]
+
+            peak_data = pd.DataFrame({
+                "Wavelength": peak_x,
+                "Signal": peak_y,
+                "Prominence": properties["prominences"]
+            })
+
+            peak_data = peak_data.sort_values(
+                "Prominence",
+                ascending=False
+            ).head(6)
+
+            peak_data = peak_data.sort_values("Wavelength")
+
+            y_min = data["Signal"].min()
+            y_max = data["Signal"].max()
+            y_range = y_max - y_min
+
+            if y_range == 0:
+                y_range = 1
+
+            axis.scatter(
+                peak_data["Wavelength"],
+                peak_data["Signal"],
+                s=60,
+                color=color,
+                zorder=5
+            )
+
+            current_min, current_max = axis.get_ylim()
+
+            axis.set_ylim(
+                current_min,
+                max(
+                    current_max,
+                    y_max + 0.4 * y_range
+                )
+            )
+
+            for x, y in zip(
+                peak_data["Wavelength"],
+                peak_data["Signal"]
+            ):
+                text = axis.text(
+                    x,
+                    y + 0.03 * y_range,
+                    f"{x:.0f} nm",
+                    fontsize=10,
+                    color=color,
+                    ha="center",
+                    va="bottom"
+                )
+
+                all_texts.append(text)
+
+            if legend is not None:
+                print(f"\nPeaks trouvés pour {legend}:")
+            else:
+                print("\nPeaks trouvés :")
+
+            for x, y in zip(
+                peak_data["Wavelength"],
+                peak_data["Signal"]
+            ):
+                print(f"{x:.1f} nm    Signal = {y:.4f}")
+
+    for i in range(n_series_left):
+
+        file_path = choose_file(
+            f"Choisir le spectre gauche {i+1}/{n_series_left}"
+        )
+
+        if not file_path:
+            print(f"Série gauche {i+1} ignorée.")
+            continue
+
+        if total_series > 1:
+            legend = input(
+                f"Nom à afficher dans la légende pour la série gauche {i+1} : "
+            )
+        else:
+            legend = None
+
+        data = read_spectrum_file(file_path)
+
+        if data is None:
+            print(f"Aucune donnée numérique trouvée dans : {file_path}")
+            continue
+
+        color = colors[i % len(colors)]
+
+        plot_series(
+            ax_left,
+            data,
+            legend,
+            color,
+            show_peaks_left,
+            prominence_left
+        )
+
+    for i in range(n_series_right):
+
+        file_path = choose_file(
+            f"Choisir le spectre droit {i+1}/{n_series_right}"
+        )
+
+        if not file_path:
+            print(f"Série droite {i+1} ignorée.")
+            continue
+
+        if total_series > 1:
+            legend = input(
+                f"Nom à afficher dans la légende pour la série droite {i+1} : "
+            )
+        else:
+            legend = None
+
+        data = read_spectrum_file(file_path)
+
+        if data is None:
+            print(f"Aucune donnée numérique trouvée dans : {file_path}")
+            continue
+
+        color = colors[(n_series_left + i) % len(colors)]
+
+        plot_series(
+            ax_right,
+            data,
+            legend,
+            color,
+            show_peaks_right,
+            prominence_right
+        )
+
+    ax_left.set_xlabel("Wavelength (nm)", fontsize=22)
+    ax_left.set_ylabel(left_ylabel, fontsize=22)
+    ax_left.tick_params(axis="both", labelsize=22)
+
+    if ax_right is not None:
+        ax_right.set_ylabel(right_ylabel, fontsize=22)
+        ax_right.tick_params(axis="y", labelsize=22)
+
+    if total_series > 1:
+        lines_left, labels_left = ax_left.get_legend_handles_labels()
+
+        if ax_right is not None:
+            lines_right, labels_right = ax_right.get_legend_handles_labels()
+        else:
+            lines_right, labels_right = [], []
+
+        ax_left.legend(
+            lines_left + lines_right,
+            labels_left + labels_right,
+            fontsize=22
+        )
+
+    if len(all_texts) > 0:
+        adjust_text(
+            all_texts,
+            expand_text=(1.2, 1.4),
+            expand_points=(1.2, 1.4),
+            force_text=(0.5, 0.8),
+            force_points=(0.3, 0.5),
+            only_move={
+                "text": "xy",
+                "points": "y",
+                "objects": "xy"
+            }
+        )
+
+    plt.tight_layout()
+
+    save_choice = input("Veux-tu sauvegarder la figure ? (o/n) ")
+
+    if save_choice.lower() in ["o", "oui", "y", "yes"]:
+
+        file_name = input("Nom du fichier (sans extension) : ")
+
+        root = Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+
+        save_dir = askdirectory(
+            title="Choisir le dossier de sauvegarde",
+            initialdir=Path.cwd()
+        )
+
+        root.destroy()
+
+        if save_dir:
+
+            png_path = Path(save_dir) / f"{file_name}.png"
+            pdf_path = Path(save_dir) / f"{file_name}.pdf"
+
+            plt.savefig(
+                png_path,
+                dpi=300,
+                bbox_inches="tight"
+            )
+
+            plt.savefig(
+                pdf_path,
+                bbox_inches="tight"
+            )
+
+            print("\nPNG sauvegardé :")
+            print(png_path)
+
+            print("\nPDF sauvegardé :")
+            print(pdf_path)
+
+        else:
+            print("Aucun dossier sélectionné. Figure non sauvegardée.")
+
+    plt.show()
