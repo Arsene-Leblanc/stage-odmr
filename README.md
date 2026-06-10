@@ -18,4 +18,4 @@ Pour tester nos échantillons, nous avons mis en place un simple montage optique
 
 ### Résultats du spectre de la photoluminescence
 Comme nous sommes encore au tout début de notre projet, il est à noter que nos cristaux sont très inégaux et que certains échantillons performent bien mieux que d'autres. Toutefois, nos résultats s'améliorent de manière relativement constante. Voici quelques spectres prit en ordre chronologique du projet. Les temps d'intégration sont les même pour tous les échantillons(150$\mu$ s) sauf le plus récent qui est de 80$\mu$ s puisqu'il saturait le détecteur sinon. 
-![Spectre du pentacène, début](photos/photo_spectre/Spectre_du_pentacène_%28150us%29_#1)
+![Spectre du pentacène, début](photos/photo_spectre/Spectre_du_pentacène_150us_#1)
