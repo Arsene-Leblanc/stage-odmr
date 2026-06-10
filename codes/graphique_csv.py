@@ -42,7 +42,6 @@ ax.set_ylabel(label_y, fontsize=12)
 
 ax.set_facecolor("white")
 fig.patch.set_facecolor("white")
-ax.grid(True, color="lightgrey", linestyle="--", linewidth=0.5)
 ax.spines[:].set_color("black")
 ax.tick_params(colors="black")
 
