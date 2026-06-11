@@ -21,3 +21,9 @@ Comme nous sommes encore au tout début de notre projet, il est à noter que nos
 ![Spectre du pentacène, début](photos/photo_spectre/Spectre_du_pentacène_150us_1.png)
 ![Spectre du pentacène, suite](photos/photo_spectre/Spectre_du_pentacène_150us_2.png)
 ![Spectre du pentacène, dernier](photos/photo_spectre/Spectre_du_pentacène_80us_5.png)
+
+### Stade 3 : Mesure du PLQY (photoluminescence quantum yield)
+(10-06-2026) Dans le cadre de notre recherche, il est pertinent de connaître le PLQY de nos échantillons. C'est à dire le pourcentage de photons émis en comparaison au nombre de photons absorbés. Cette caractéristique définie en quelque sorte la qualité de la fluorescence de notre échantillon. Pour cette mesure, il est important d'avoir un échantillon petit et de qualité. Nous avons donc coupé des lames de verre et essayer de déposer efficacement des cristaux de PTP dopés au PC sur ceux-ci. Toutefois, le premier essai fut un échec, aucun pentacène ne fut détecté. Ce résultat étrange n'est pas une première et nous cherchons toujours la raison expliquant ce phénomène. Parfois, on dirait simplement que le cristal de PTP n'a aucun pentacène. 
+
+### Stade 4 : Modulation de la luminescence par micro-onde
+La suite logique des expériences de tester la modulation de la PL de nos échantillons en l'excitant avec des micro-ondes. 
