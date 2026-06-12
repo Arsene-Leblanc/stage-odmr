@@ -378,11 +378,11 @@ def Spectrum():
         )
 
     plt.subplots_adjust(
-        left=0.13,
-        right=0.90,
-        bottom=0.17,
-        top=0.86 if graph_title.strip() else 0.92
-    )
+     left=0.13,
+     right=0.82,
+     bottom=0.17,
+     top=0.86
+    ) 
 
     save_choice = input("Veux-tu sauvegarder la figure ? (o/n) ")
 
