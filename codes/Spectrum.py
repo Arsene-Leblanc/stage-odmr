@@ -105,6 +105,17 @@ def Spectrum():
     else:
         graph_title = ""
 
+    xlim_choice = ask_yes_no(
+        "Veux-tu imposer des limites sur l'axe des x ? (o/n) "
+    )
+
+    if xlim_choice:
+        x_min = float(input("Limite minimale de x : "))
+        x_max = float(input("Limite maximale de x : "))
+    else:
+        x_min = None
+        x_max = None
+
     n_series_left = int(
         input("Combien de séries veux-tu tracer sur l'axe Y gauche ? ")
     )
@@ -179,6 +190,15 @@ def Spectrum():
                 "Signal": peak_y,
                 "Prominence": properties["prominences"]
             })
+
+            if xlim_choice:
+                peak_data = peak_data[
+                    (peak_data["Wavelength"] >= x_min)
+                    & (peak_data["Wavelength"] <= x_max)
+                ]
+
+            if len(peak_data) == 0:
+                return
 
             peak_data = peak_data.sort_values(
                 "Prominence",
@@ -334,6 +354,9 @@ def Spectrum():
     if ax_right is not None:
         ax_right.set_ylabel(right_ylabel, fontsize=22)
         ax_right.tick_params(axis="y", labelsize=22)
+
+    if xlim_choice:
+        ax_left.set_xlim(x_min, x_max)
 
     if total_series > 1:
         lines_left, labels_left = ax_left.get_legend_handles_labels()
