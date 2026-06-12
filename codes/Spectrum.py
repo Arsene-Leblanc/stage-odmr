@@ -6,7 +6,6 @@ import re
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
-from adjustText import adjust_text
 
 
 def Spectrum():
@@ -92,10 +91,19 @@ def Spectrum():
         "cyan"
     ]
 
-    fig, ax_left = plt.subplots()
+    fig, ax_left = plt.subplots(figsize=(12, 7))
     ax_right = None
 
     left_ylabel = input("Titre de l'axe Y gauche : ")
+
+    graph_title_choice = ask_yes_no(
+        "Veux-tu ajouter un titre au graphique ? (o/n) "
+    )
+
+    if graph_title_choice:
+        graph_title = input("Titre du graphique : ")
+    else:
+        graph_title = ""
 
     n_series_left = int(
         input("Combien de séries veux-tu tracer sur l'axe Y gauche ? ")
@@ -142,7 +150,6 @@ def Spectrum():
         prominence_right = None
 
     total_series = n_series_left + n_series_right
-    all_texts = []
 
     def plot_series(axis, data, legend, color, show_peaks_axis, prominence_axis):
 
@@ -190,10 +197,39 @@ def Spectrum():
             axis.scatter(
                 peak_data["Wavelength"],
                 peak_data["Signal"],
-                s=60,
+                s=45,
                 color=color,
                 zorder=5
             )
+
+            label_positions = []
+
+            for x, y in zip(
+                peak_data["Wavelength"],
+                peak_data["Signal"]
+            ):
+
+                y_label = y + 0.04 * y_range
+
+                while any(
+                    abs(x - old_x) < 45
+                    and abs(y_label - old_y) < 0.08 * y_range
+                    for old_x, old_y in label_positions
+                ):
+                    y_label += 0.06 * y_range
+
+                label_positions.append((x, y_label))
+
+                axis.text(
+                    x,
+                    y_label,
+                    f"{x:.0f} nm",
+                    fontsize=10,
+                    color=color,
+                    ha="center",
+                    va="bottom",
+                    clip_on=True
+                )
 
             current_min, current_max = axis.get_ylim()
 
@@ -201,25 +237,9 @@ def Spectrum():
                 current_min,
                 max(
                     current_max,
-                    y_max + 0.4 * y_range
+                    y_max + 0.25 * y_range
                 )
             )
-
-            for x, y in zip(
-                peak_data["Wavelength"],
-                peak_data["Signal"]
-            ):
-                text = axis.text(
-                    x,
-                    y + 0.03 * y_range,
-                    f"{x:.0f} nm",
-                    fontsize=10,
-                    color=color,
-                    ha="center",
-                    va="bottom"
-                )
-
-                all_texts.append(text)
 
             if legend is not None:
                 print(f"\nPeaks trouvés pour {legend}:")
@@ -300,6 +320,13 @@ def Spectrum():
             prominence_right
         )
 
+    if graph_title.strip():
+        ax_left.set_title(
+            graph_title,
+            fontsize=24,
+            pad=20
+        )
+
     ax_left.set_xlabel("Wavelength (nm)", fontsize=22)
     ax_left.set_ylabel(left_ylabel, fontsize=22)
     ax_left.tick_params(axis="both", labelsize=22)
@@ -319,24 +346,20 @@ def Spectrum():
         ax_left.legend(
             lines_left + lines_right,
             labels_left + labels_right,
-            fontsize=22
+            fontsize=14,
+            loc="upper right",
+            bbox_to_anchor=(0.98, 0.98),
+            frameon=True,
+            facecolor="white",
+            framealpha=0.9
         )
 
-    if len(all_texts) > 0:
-        adjust_text(
-            all_texts,
-            expand_text=(1.2, 1.4),
-            expand_points=(1.2, 1.4),
-            force_text=(0.5, 0.8),
-            force_points=(0.3, 0.5),
-            only_move={
-                "text": "xy",
-                "points": "y",
-                "objects": "xy"
-            }
-        )
-
-    plt.tight_layout()
+    plt.subplots_adjust(
+        left=0.13,
+        right=0.90,
+        bottom=0.17,
+        top=0.86 if graph_title.strip() else 0.92
+    )
 
     save_choice = input("Veux-tu sauvegarder la figure ? (o/n) ")
 
@@ -362,13 +385,11 @@ def Spectrum():
 
             plt.savefig(
                 png_path,
-                dpi=300,
-                bbox_inches="tight"
+                dpi=300
             )
 
             plt.savefig(
-                pdf_path,
-                bbox_inches="tight"
+                pdf_path
             )
 
             print("\nPNG sauvegardé :")
