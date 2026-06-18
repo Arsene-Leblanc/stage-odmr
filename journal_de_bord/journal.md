@@ -16,7 +16,7 @@ One problem of the method is that there is a strong tendency for PTP to crystali
 
 
 
-Here it doesn't help that the bottom of the beaker is in oval shape, with gravity tending to bring any melt near the corners. Another problem is that some PTP is also turning into vapour, which then condensates e.g. near colder surfaces and either crystalize on the surfaces or rains down in crystal form(the grains acting as potential seeds). When the lamelle is inserted(even after gradual heating of the lamelles), some PTP vapour also crystalizes on the lamelle but without pentacene. 
+Here it doesn't help that the bottom of the beaker is in oval shape, with gravity tending to bring any melt near the corners. Another problem is that some PTP is also turning into vapour, which then condensates e.g. near colder surfaces and either crystalize on the surfaces or rains down in crystal form(the grains acting as potential seeds). When the lamelle is inserted(even after gradual heating of the lamelles), some PTP vapour also crystalizes on the lamelle but without pentacene.
 
 !\[The lamelles after the experiment]
 
@@ -24,9 +24,9 @@ Here it doesn't help that the bottom of the beaker is in oval shape, with gravit
 
 
 
-Here the tip of one lamelle was seen to detach. The possible culprits are: 
+Here the tip of one lamelle was seen to detach. The possible culprits are:
 
-\-Thermal shocks  
+\-Thermal shocks
 
 \-The glass becoming easier to break with higher temperatures.
 
@@ -39,6 +39,46 @@ Here the tip of one lamelle was seen to detach. The possible culprits are:
 
 
 One last thing is that with higher temperature, either PTP or (more probably) the pentacene can react with oxygen in the air and degrade. This explains the brownish/orange colour on the agglomerations of crystal and broken parts of the lamelles.
+
+
+
+
+
+\### 2026/06/18
+
+
+
+From the agglomerations of crystal with purple/rose colour, 3 were taken, glued either on a lamelle or on a pinhead and tested for PL with our setup, using the spectrometer and the LIA and the chopper.
+
+
+
+!\[Sample 2]
+
+(photos/Photo(journal)/06-18-Sample2.jpg)
+
+
+
+&#x20;On the spectrometer and with 10ms integration time, the emission spectrum of the 3 samples is the following:
+
+
+
+!\[Spectrum]
+
+(photos/photo\_spectre/06-18-Sample2.pdf)
+
+
+
+It is noted that the ratio of peaks is quite different from that of the previous samples. One reason may be that we are picking up PL from the degraded forms of pentacene. The LIA(locked in at a frequency of around 300Hz with the chopper) yielded a signal of 0.5V. On both accounts(LIA and spectrometer), the PL intensity measured surpasses by far that of the samples previously measured. The photoluminescence was also intense enough to be visible even with the lights on in the room.
+
+
+
+!\[Visible PL from sample 2(lights off)]
+
+(photos/photo\_spectre/06-18-Sample2-PL.pdf)
+
+
+
+Clearly the method is promising but there are some problems to solve: first, the samples are not monocrystaline and rather opaque. Therefore most of the time we should be seing PL from near the surface of the sample, thus most of the sample is wasted. Second degraded forms of pentacene, along with a bigger lack of uniformity in the sample(resulting e.g. from a polycristaline structure) should impact its coherence. There should be a way to obtain a better crystal structure with the method. Third we have yet to figure out a better way to collect the crystals forming from the melt. 
 
 
 
