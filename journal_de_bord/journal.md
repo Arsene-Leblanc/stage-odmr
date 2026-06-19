@@ -52,7 +52,7 @@ On the spectrometer and with 10ms integration time, the emission spectrum of the
 
 
 
-![PL spectrum of the new samples](../photos/photo_spectre/MeltMethod17-06-3-samples.pdf)
+![PL spectrum of the new samples](../photos/photo_spectre/MeltMethod17-06-3-samples.png)
 
 
 
