@@ -52,7 +52,7 @@ On the spectrometer and with 10ms integration time, the emission spectrum of the
 
 
 
-![PL spectrum of the new samples](../photos/photo_spectre/06-18-Sample2.pdf)
+![PL spectrum of the new samples](../photos/photo_spectre/MeltMethod17-06-3-samples.pdf)
 
 
 
@@ -60,11 +60,11 @@ It is noted that the ratio of peaks is quite different from that of the previous
 
 
 
-![Visible PL from sample 2(lights off)](../photos/photo_spectre/06-18-Sample2-PL.pdf)
+![Visible PL from sample 2(lights off)](../photos/Photo(journal)/06-18-Sample2-PL.jpg)
 
 
 
-Clearly the method is promising but there are some problems to solve: first, the samples are not monocrystaline and rather opaque. Therefore most of the time we should be seing PL from near the surface of the sample, and most of the sample is wasted. Second degraded forms of pentacene, along with a bigger lack of uniformity in the sample(resulting e.g. from a polycristaline structure) should impact its coherence. There should be a way to obtain a better crystal structure with the method. Third we have yet to figure out a better way to collect the crystals forming from the melt. This involves having a better handle over it.
+Clearly the method is promising but there are some issues: first, the samples are not monocrystaline and rather opaque. Therefore most of the time we should be seing PL from near the surface of the sample, and most of the sample is wasted. Second, the degraded forms of pentacene, along with a bigger lack of uniformity in the sample(resulting e.g. from a polycristaline structure) should impact its coherence. There may be a way to obtain a better crystal structure with the method. Third we have yet to figure out a better way to collect the crystals forming from the melt. This involves having a better handle over it.
 
 
 
