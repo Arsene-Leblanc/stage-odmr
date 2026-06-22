@@ -32,7 +32,7 @@ The ''missing'' tip is shown below, where it is clearly seen that PTP crystals w
 
 
 
-One last thing is that with higher temperature, either PTP or (more probably) the pentacene can react with oxygen in the air and degrade. This explains the brownish/orange colour on the agglomerations of crystal and broken parts of the lamelles.
+With higher temperature, the pentacene reacts with oxygen in the air and degrade. This explains the brownish/orange colour on the agglomerations of crystal and broken parts of the lamelles.
 
 
 
