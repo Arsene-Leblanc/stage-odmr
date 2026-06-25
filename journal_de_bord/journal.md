@@ -72,11 +72,11 @@ Clearly the method is promising but there are some issues: first, the samples ar
 
 A new method of fabrication was used to create a sample. The method is a variation of the melt method used previously. First a lamelle is pre-heated gradualy(to avoid thermal shocks) in a large beaker at around 300-350 C, and then the powder of PTP with 0.1% PC is melted and crystalized in place on the lamelle. Upon stirring and cooling of the resulting mixture of melt/crystals,  the following sample was obtained:
 
-![New sample PL](../photos/Photo(journal)/06-25-Sample-PL.jpg)
+![New sample PL](../photos/Photo(journal)/06-25-Sample.jpg)
 
 The PL of the sample was good as can be seen from the following picture:
 
-![New sample](../photos/Photo(journal)/06-25-Sample.jpg)
+![New sample](../photos/Photo(journal)/06-25-Sample-PL.jpg)
 
 The method seems to be solving the issues we had with the melt method. Furthermore, it allows to create samples rather quickly(around 20-40 min).
 
