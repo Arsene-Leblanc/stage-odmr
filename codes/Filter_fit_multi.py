@@ -456,9 +456,10 @@ def main():
         plt.title("Données filtrées et fits")
         plt.legend()
         plt.tight_layout()
+        save_current_figure()
         plt.show()
 
-        save_current_figure()
+        
 
     # ========================================================
     # Tableau final combiné
