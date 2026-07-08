@@ -23,15 +23,15 @@ st.set_page_config(page_title="Analyse ODMR", page_icon="🔬", layout="wide")
 # ---------------------------------------------------------------------------
 # Navigation
 # ---------------------------------------------------------------------------
-st.sidebar.title("🔬 Analyse ODMR")
+st.sidebar.title("🔬 Analyse ODMR - Outil de traitement de données")
 page = st.sidebar.radio(
-    "Outil",
-    ["1 · Traitement de sweeps", "2 · Filtre & Fit"],
+    "Outils",
+    ["1 · Traitement de sweeps (temps->fréquence) ", "2 · Filtre & Fit"],
 )
 st.sidebar.markdown("---")
 st.sidebar.caption(
-    "Prototype pour l'équipe — les données ne quittent pas la session. "
-    "Ajoutez vos futurs scripts comme nouvelles pages dans `app.py`."
+    " Attention, les données ne quittent pas la session. Enregistrez avant de fermer. "
+    "Ajoutez vos futurs scripts comme nouvelles pages dans `app.py`. Petit guide dans le README"
 )
 
 
@@ -68,7 +68,7 @@ def fig_png_bytes(fig, dpi=150):
 # PAGE 1 — Traitement de sweeps
 # ===========================================================================
 if page.startswith("1"):
-    st.title("Traitement de sweeps ODMR")
+    st.title("Traitement de sweeps ODMR - Temps -> Fréquence")
     st.markdown(
         "Chaque fichier contient des **voltages en fonction du temps** pendant un "
         "balayage de fréquence micro-onde. L'outil regroupe les échantillons par "
@@ -88,11 +88,11 @@ if page.startswith("1"):
         n_freq = st.number_input("Nombre de fréquences testées", min_value=2,
                                  value=200, step=1)
     with col2:
-        f_debut = st.number_input("Fréquence de départ (GHz)", value=2.5,
-                                  format="%.4f")
+        f_debut = st.number_input("Fréquence de départ (GHz)", value=1.5,
+                                  format="%.3f")
     with col3:
-        f_fin = st.number_input("Fréquence de fin (GHz)", value=3.5,
-                                format="%.4f")
+        f_fin = st.number_input("Fréquence de fin (GHz)", value=2.5,
+                                format="%.3f")
 
     if st.button("Lancer le traitement", type="primary", disabled=not fichiers):
         donnees, noms = [], []
@@ -131,7 +131,7 @@ if page.startswith("1"):
                      label=nom if res.n_sweeps <= 12 else None)
         ax1.set_title(f"Tous les sweeps ({res.n_sweeps} acquisitions)")
         ax1.set_xlabel("Fréquence (GHz)")
-        ax1.set_ylabel("Amplitude (V)")
+        ax1.set_ylabel("Amplitude ")
         if res.n_sweeps <= 12:
             ax1.legend(fontsize=7)
         fig1.tight_layout()
@@ -155,7 +155,7 @@ if page.startswith("1"):
             f"~{res.facteur_reduction_bruit:.1f}"
         )
         ax2.set_xlabel("Fréquence (GHz)")
-        ax2.set_ylabel("Amplitude (V)")
+        ax2.set_ylabel("Amplitude")
         ax2.grid(True, ls="--", alpha=0.5)
         ax2.legend()
         fig2.tight_layout()
@@ -209,7 +209,7 @@ if page.startswith("1"):
 else:
     st.title("Filtre & Fit")
     st.markdown(
-        "Charge un CSV **voltage(fréquence)** (par exemple la moyenne produite "
+        "Charge un CSV **voltage en fct de la fréquence ** (par exemple la moyenne produite "
         "par l'outil 1), applique un filtre optionnel, puis ajuste une ou "
         "plusieurs courbes (lorentzienne, gaussienne, polynomiale)."
     )
@@ -286,7 +286,7 @@ else:
                     ordre_poly = st.number_input("Ordre", 0, 10, 2,
                                                  key=f"ordre_{i}")
                 else:
-                    creux = st.checkbox("Le pic est un creux (dip ODMR)",
+                    ceux = st.checkbox("Le pic est un creux (dip ODMR)",
                                         key=f"creux_{i}")
             with cr:
                 xmin, xmax = st.slider(
