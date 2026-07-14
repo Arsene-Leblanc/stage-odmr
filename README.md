@@ -17,6 +17,9 @@ Nos premiers cristaux ont été difficiles à faire croitre, toutefois, nous arr
 #### Update ! 29 juin 2026
 Nous avons testé récemmenent une nouvelle méthode pour produire des cristaux avec une meilleure concentration en pentacène. Pour ce faire, 300mg de PTP on été mélangé avec 0.3mg de PC sous forme solide (poudre). Une lame de microscope a été chauffé dans une boite de petri en verre jusqu'à 350 degré Celcius. Une fois cette température atteinte, nous savions que le P-Terphényle allait fondre (212-214 degrés comme température de fusion), et que le pentacène allait lui aussi fondre dans ce mélange (>300 degree, mais sublime à 372C). Pour de futurs essais il serait pertinent de tester à des températures plus basse, proche de la température de fusion du PTP. Le pentacène aurait possiblement la capacité de se dissoudre dedans. Une fois la lame à température désirée, il suffit de déposer la poudre, laisser quelques secondes au PTP de fondre, puis lors de l'apparition d'une couleur mauve/magenta, il est nécessaire de déplacer l'amas de poudre sur la lame, cela étale le liquide. Rapidement, il faut baisser la température. Effectivement, la pression vapeur du PTP est assez élevée à cette température et il est possible de voir la masse diminuer significativement si l'on laisse trop longtemps chauffer le PTP. Le résultat final est un cristal magenta sur la lame, polycristallin, d'une épaisseur que nous estimons à quelques dixièmes de milimètre.
 ![Critaux de PTP dopés au PC magenta](photos/photo_journal/06-25-Sample.jpg)
+
+### Croissance par évaporation
+Après avoir obtenu l'approbation de Stéphane Kena-Cohen et de David Ménard, nous pouvons dorénavant tenter de produire des cristaux en couche mince par évaporation.
  
 ### Stade 2 : Mesure de la photoluminescence et du spectre en régime continu
 Pour tester nos échantillons, nous avons mis en place un simple montage optique. Il est composé d'un LASER vert dde 505nm et de puissance <5mW. Il vise l'échantillon qui est soutenue par une petite pince. La lumière émise par PL est convergée par une lentille de f=25mm puis un filtre (550nm) empêche notre LASER de polluer la mesure. Au bout, une fibre optique de 10um² capte la PL et se rend dans un spectromètre qui analyse notre spectre d'émission.![Montage optique initial](photos/photo_aléatoire/montageoptique.jpg)
@@ -38,4 +41,5 @@ L'antenne utilisée pour l'instant est un mince fil de cuivre formant une boucle
 ### Suivi Stade 4 : Résonnance du LASER
 Suite à la découverte du pic autour de 1.1GHz, comme ce pic n'était répertorié dans aucun article, il a fallu chercher son origine. Après 1 semaine de tests, nous concluons que la résonnance venait probablement du laser. Par un phénomène X, nous amplifions la sortie du laser à ces fréquences. (RLC possible) L'antenne a été éloignée de l'échantillon et rapproché du laser et l'effet de la résonnance n'a été qu'amplifié. 
 
-  
+### Ajout d'un dockerfile pour traduire les données brutes
+
