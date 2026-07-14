@@ -32,4 +32,10 @@ Comme nous sommes encore au tout début de notre projet, il est à noter que nos
 
 ### Stade 4 : Modulation de la luminescence par micro-onde
 La suite logique des expériences de tester la modulation de la PL de nos échantillons en l'excitant avec des micro-ondes. Un montage avec a été réalisé avec 2 Lock-in Amplifier, un oscilloscope et un Analogue Signal Generator. ![montage](photos/photo_journal/montageLIA.jpg)
-L'antenne utilisée pour l'instant est un mince fil de cuivre formant une boucle. On module les ondes radios (AM/FM) et procédons à une prise de mesure avec plusieurs milliers de pas en utilisant la fonction SWEEP de l'appareil. Le trigger est une entrée digitale à l'arrière de l'appareil que toute carte d'acquisition peut contrôler. Le premier Lock-in isole la fréquence de 500 Hz du chopper, le deuxième cherche la fréquence de modulationn des micro ondes.  
+L'antenne utilisée pour l'instant est un mince fil de cuivre formant une boucle. On module les ondes radios (AM/FM) et procédons à une prise de mesure avec plusieurs milliers de pas en utilisant la fonction SWEEP de l'appareil. Le trigger est une entrée digitale à l'arrière de l'appareil que toute carte d'acquisition peut contrôler. Le premier Lock-in isole la fréquence de 500 Hz du chopper, le deuxième cherche la fréquence de modulationn des micro ondes. Nous avons aussi essayé la modulation avec une stripline (line-waveguide) et nous avons obtenu des résultats similaires à ceux de l'antenne simple. La fréquence de résonnance semble être à 1.1GHz.
+![montage](photos/photo_spectre/Sweep_0707_magnet_added_filtered_fitted.png)
+
+### Suivi Stade 4 : Résonnance du LASER
+Suite à la découverte du pic autour de 1.1GHz, comme ce pic n'était répertorié dans aucun article, il a fallu chercher son origine. Après 1 semaine de tests, nous concluons que la résonnance venait probablement du laser. Par un phénomène X, nous amplifions la sortie du laser à ces fréquences. (RLC possible) L'antenne a été éloignée de l'échantillon et rapproché du laser et l'effet de la résonnance n'a été qu'amplifié. 
+
+  
