@@ -8,6 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from scipy.integrate import solve_ivp
+from scipy.linalg import expm
 
 
 H = 6.62607015e-34  # J.s
@@ -31,13 +32,25 @@ def rate_matrix(p: dict[str, float]) -> np.ndarray:
     wxz, wzx = p["wxz"], p["wzx"]
     wyz, wzy = p["wyz"], p["wzy"]
 
+    # Effective incoherent microwave mixing.
+    # The user enters the Rabi frequency Ω/2π in MHz.
+    # In this rate-equation approximation, ΓMW = Ω = 2π fR
+    # is added symmetrically to both directions of the driven pair.
+    gxy = p["gamma_xy"]
+    gxz = p["gamma_xz"]
+    gyz = p["gamma_yz"]
+
+    wxy_eff, wyx_eff = wxy + gxy, wyx + gxy
+    wxz_eff, wzx_eff = wxz + gxz, wzx + gxz
+    wyz_eff, wzy_eff = wyz + gyz, wzy + gyz
+
     return np.array(
         [
             [-k01,          k10,                  kx,                  ky,                  kz],
             [ k01, -(k10 + kisc),                 0.0,                 0.0,                 0.0],
-            [ 0.0,     kisc * px, -(kx + wxy + wxz),                 wyx,                 wzx],
-            [ 0.0,     kisc * py,                 wxy, -(ky + wyx + wyz),                 wzy],
-            [ 0.0,     kisc * pz,                 wxz,                 wyz, -(kz + wzx + wzy)],
+            [ 0.0, kisc * px, -(kx + wxy_eff + wxz_eff),              wyx_eff,              wzx_eff],
+            [ 0.0, kisc * py,                  wxy_eff, -(ky + wyx_eff + wyz_eff),              wzy_eff],
+            [ 0.0, kisc * pz,                  wxz_eff,              wyz_eff, -(kz + wzx_eff + wzy_eff)],
         ],
         dtype=float,
     )
@@ -67,6 +80,9 @@ class PopulationApp(tk.Tk):
         self.vars: dict[str, tk.StringVar] = {}
         self.last_data: tuple[np.ndarray, np.ndarray] | None = None
         self.last_stationary: np.ndarray | None = None
+        self.plot_vars: dict[str, tk.BooleanVar] = {}
+        self.last_parameters: dict[str, float] | None = None
+        self.last_initial_state: np.ndarray | None = None
 
         self._build_ui()
         self._set_defaults()
@@ -181,6 +197,42 @@ class PopulationApp(tk.Tk):
         self._entry(probs, 1, "Py", "Py", "")
         self._entry(probs, 2, "Pz", "Pz", "")
 
+        mw = ttk.LabelFrame(controls, text="Microwave drives", padding=6)
+        mw.pack(fill="x", pady=4)
+        ttk.Label(
+            mw,
+            text=("Enter Ω/2π. The rate model uses symmetric mixing "
+                  "ΓMW = 2π(Ω/2π). Very large values make adaptive ODE "
+                  "solvers stiff; Matrix exponential is recommended."),
+            wraplength=245,
+        ).grid(row=0, column=0, columnspan=3, sticky="w", padx=4, pady=(2, 6))
+        self._entry(mw, 1, "Txy drive Ωxy/2π", "rabi_xy_mhz", "MHz")
+        self._entry(mw, 2, "Txz drive Ωxz/2π", "rabi_xz_mhz", "MHz")
+        self._entry(mw, 3, "Tyz drive Ωyz/2π", "rabi_yz_mhz", "MHz")
+
+        plot_options = ttk.LabelFrame(controls, text="Curves shown", padding=6)
+        plot_options.pack(fill="x", pady=4)
+        for index, label in enumerate(["S0", "S1", "Tx", "Ty", "Tz", "T1 total"]):
+            var = tk.BooleanVar(value=True)
+            self.plot_vars[label] = var
+            ttk.Checkbutton(
+                plot_options,
+                text=label,
+                variable=var,
+                command=self.update_plot,
+            ).grid(row=index // 2, column=index % 2, sticky="w", padx=4, pady=2)
+
+        ttk.Button(
+            plot_options,
+            text="Show all",
+            command=lambda: self.set_all_curves(True),
+        ).grid(row=3, column=0, sticky="ew", padx=4, pady=(5, 2))
+        ttk.Button(
+            plot_options,
+            text="Hide all",
+            command=lambda: self.set_all_curves(False),
+        ).grid(row=3, column=1, sticky="ew", padx=4, pady=(5, 2))
+
         # Simulation settings
         sim = ttk.LabelFrame(controls, text="Simulation and initial populations", padding=6)
         sim.pack(fill="x", pady=4)
@@ -200,11 +252,11 @@ class PopulationApp(tk.Tk):
         self._entry(sim, 8, "Initial Tz", "Tz_0", "")
 
         ttk.Label(sim, text="Integrator").grid(row=9, column=0, sticky="w", padx=4, pady=2)
-        self.method_var = tk.StringVar(value="Radau")
+        self.method_var = tk.StringVar(value="Matrix exponential")
         ttk.Combobox(
             sim,
             textvariable=self.method_var,
-            values=["Radau", "BDF", "LSODA", "RK45"],
+            values=["Matrix exponential", "Radau", "BDF", "LSODA", "RK45"],
             state="readonly",
             width=11,
         ).grid(row=9, column=1, padx=4, pady=2)
@@ -222,6 +274,12 @@ class PopulationApp(tk.Tk):
         )
         ttk.Button(button_frame, text="Reset defaults", command=self.reset_defaults).pack(side="left", padx=3)
         ttk.Button(button_frame, text="Export CSV", command=self.export_csv).pack(side="left", padx=3)
+
+        ttk.Button(
+            controls,
+            text="Open intensity sweep / ΔPL/PL tool",
+            command=self.open_intensity_sweep_tool,
+        ).pack(fill="x", pady=(0, 8))
 
         stationary = ttk.LabelFrame(controls, text="Stationary populations", padding=6)
         stationary.pack(fill="x", pady=(4, 8))
@@ -287,6 +345,9 @@ class PopulationApp(tk.Tk):
             "Px": "0.76",
             "Py": "0.16",
             "Pz": "0.08",
+            "rabi_xy_mhz": "0",
+            "rabi_xz_mhz": "0",
+            "rabi_yz_mhz": "0",
 
             # Simulation
             "t_start": "1e-10",
@@ -316,6 +377,72 @@ class PopulationApp(tk.Tk):
                 self.vars[key].set(f"{value:.10g}")
         except Exception as exc:
             messagebox.showerror("Normalization error", str(exc))
+
+    def set_all_curves(self, visible: bool) -> None:
+        for var in self.plot_vars.values():
+            var.set(visible)
+        self.update_plot()
+
+    def update_plot(self) -> None:
+        if self.last_data is None:
+            return
+
+        t, y = self.last_data
+        curves = {
+            "S0": y[0],
+            "S1": y[1],
+            "Tx": y[2],
+            "Ty": y[3],
+            "Tz": y[4],
+            "T1 total": y[2] + y[3] + y[4],
+        }
+
+        self.ax.clear()
+        selected_values = []
+
+        for label, values in curves.items():
+            if not self.plot_vars.get(label, tk.BooleanVar(value=True)).get():
+                continue
+            if label == "T1 total":
+                self.ax.plot(t, values, "--", linewidth=2, label="T1 = Tx + Ty + Tz")
+            else:
+                self.ax.plot(t, values, label=label)
+            selected_values.append(values)
+
+        if self.log_time_var.get() and np.all(t > 0):
+            self.ax.set_xscale("log")
+        else:
+            self.ax.set_xscale("linear")
+
+        self.ax.set_xlabel("Time (s)")
+        self.ax.set_ylabel("Population")
+        self.ax.set_title("Population dynamics from Eq. (2)")
+        self.ax.grid(False)
+
+        if selected_values:
+            values = np.concatenate(selected_values)
+            finite = values[np.isfinite(values)]
+            if finite.size:
+                ymin = float(np.min(finite))
+                ymax = float(np.max(finite))
+                span = ymax - ymin
+                margin = 0.06 * span if span > 0 else max(0.02, 0.06 * abs(ymax))
+                lower = max(0.0, ymin - margin)
+                upper = ymax + margin
+                if upper <= lower:
+                    upper = lower + 0.05
+                self.ax.set_ylim(lower, upper)
+            self.ax.legend(ncol=2)
+        else:
+            self.ax.text(
+                0.5, 0.5, "No population curve selected",
+                transform=self.ax.transAxes,
+                ha="center", va="center",
+            )
+            self.ax.set_ylim(0.0, 1.0)
+
+        self.fig.tight_layout()
+        self.canvas.draw_idle()
 
     def copy_stationary_values(self) -> None:
         if self.last_stationary is None:
@@ -374,6 +501,16 @@ class PopulationApp(tk.Tk):
             if p[key] < 0:
                 raise ValueError(f"{key} must be non-negative.")
 
+        for pair, key in [
+            ("xy", "rabi_xy_mhz"),
+            ("xz", "rabi_xz_mhz"),
+            ("yz", "rabi_yz_mhz"),
+        ]:
+            rabi_mhz = self._read_float(key)
+            if rabi_mhz < 0:
+                raise ValueError(f"{key} must be non-negative.")
+            p[f"gamma_{pair}"] = 2.0 * math.pi * rabi_mhz * 1e6
+
         prob_sum = p["Px"] + p["Py"] + p["Pz"]
         if prob_sum <= 0:
             raise ValueError("At least one of Px, Py or Pz must be greater than zero.")
@@ -415,9 +552,35 @@ class PopulationApp(tk.Tk):
 
         return p, y0, t_start, t_end, n_points
 
+    @staticmethod
+    def propagate_linear_system(
+        A: np.ndarray,
+        y0: np.ndarray,
+        times: np.ndarray,
+        t0: float,
+    ) -> np.ndarray:
+        """Exact propagation for the constant linear system dN/dt = A N.
+
+        For this 5x5 problem, evaluating exp[A(t-t0)] is fast and avoids
+        the tiny adaptive time steps caused by very large microwave rates.
+        """
+        result = np.empty((len(y0), len(times)), dtype=float)
+        for index, time_value in enumerate(times):
+            dt = float(time_value - t0)
+            if dt <= 0:
+                result[:, index] = y0
+            else:
+                result[:, index] = expm(A * dt) @ y0
+
+        # Remove only roundoff-level artifacts.
+        result[np.abs(result) < 1e-14] = 0.0
+        return result
+
     def run_simulation(self) -> None:
         try:
             p, y0, t_start, t_end, n_points = self._collect_parameters()
+            self.last_parameters = p.copy()
+            self.last_initial_state = y0.copy()
 
             # Display the actual normalized values used in the calculation.
             for key in ["Px", "Py", "Pz"]:
@@ -433,21 +596,25 @@ class PopulationApp(tk.Tk):
                 t_eval = np.linspace(t_start, t_end, n_points)
 
             method = self.method_var.get()
-            sol = solve_ivp(
-                fun=lambda t, y: A @ y,
-                t_span=(t_start, t_end),
-                y0=y0,
-                method=method,
-                t_eval=t_eval,
-                rtol=1e-9,
-                atol=1e-12,
-            )
-            if not sol.success:
-                raise RuntimeError(sol.message)
 
-            y = sol.y
-            # Remove negligible numerical drift only.
-            y[np.abs(y) < 1e-13] = 0.0
+            if method == "Matrix exponential":
+                time_values = t_eval
+                y = self.propagate_linear_system(A, y0, time_values, t_start)
+            else:
+                sol = solve_ivp(
+                    fun=lambda t, state: A @ state,
+                    t_span=(t_start, t_end),
+                    y0=y0,
+                    method=method,
+                    t_eval=t_eval,
+                    rtol=1e-8,
+                    atol=1e-11,
+                )
+                if not sol.success:
+                    raise RuntimeError(sol.message)
+                time_values = sol.t
+                y = sol.y
+                y[np.abs(y) < 1e-13] = 0.0
 
             ss = steady_state(A)
             self.last_stationary = ss.copy()
@@ -467,31 +634,16 @@ class PopulationApp(tk.Tk):
             nonzero = [ev for ev in eigvals if abs(ev) > 1e-10]
             slowest_tau = max((-1.0 / ev.real for ev in nonzero if ev.real < 0), default=float("nan"))
 
-            self.last_data = (sol.t.copy(), y.copy())
+            self.last_data = (time_values.copy(), y.copy())
             self.k01_label.config(text=f"{p['k01']:.4e} s⁻¹")
 
-            self.ax.clear()
-            labels = ["S0", "S1", "Tx", "Ty", "Tz"]
-            for values, label in zip(y, labels):
-                self.ax.plot(sol.t, values, label=label)
-
-            T1 = y[2] + y[3] + y[4]
-            self.ax.plot(sol.t, T1, "--", linewidth=2, label="T1 = Tx + Ty + Tz")
-
-            if self.log_time_var.get() and t_start > 0:
-                self.ax.set_xscale("log")
-
-            self.ax.set_xlabel("Time (s)")
-            self.ax.set_ylabel("Population")
-            self.ax.set_ylim(-0.02, 1.02)
-            self.ax.legend(ncol=2)
-            self.ax.grid(False)
-            self.ax.set_title("Population dynamics from Eq. (2)")
-            self.fig.tight_layout()
-            self.canvas.draw_idle()
+            self.update_plot()
 
             summary_lines = [
                 f"k01 = σIλ/(hc) = {p['k01']:.6e} s⁻¹",
+                f"ΓMW,xy = {p['gamma_xy']:.6e} s⁻¹",
+                f"ΓMW,xz = {p['gamma_xz']:.6e} s⁻¹",
+                f"ΓMW,yz = {p['gamma_yz']:.6e} s⁻¹",
                 "",
                 "Stationary populations:",
                 f"S0 = {ss[0]:.8f}",
@@ -507,14 +659,511 @@ class PopulationApp(tk.Tk):
             ]
             self.summary.delete("1.0", tk.END)
             self.summary.insert(tk.END, "\n".join(summary_lines))
+            max_mw_rate = max(p["gamma_xy"], p["gamma_xz"], p["gamma_yz"])
+            intrinsic_scale = max(
+                p["k10"], p["kISC"], p["kx"], p["ky"], p["kz"],
+                p["wxy"], p["wyx"], p["wxz"], p["wzx"], p["wyz"], p["wzy"],
+            )
+            stiffness_ratio = max_mw_rate / intrinsic_scale if intrinsic_scale > 0 else 0.0
             self.status_var.set(
-                "Simulation updated. Px, Py, Pz and the initial populations "
-                "were normalized automatically."
+                f"Simulation updated with {method}. "
+                f"Maximum MW/intrinsic rate ratio: {stiffness_ratio:.3e}."
             )
 
         except Exception as exc:
             self.status_var.set(f"Simulation not updated: {exc}")
             messagebox.showerror("Simulation error", str(exc))
+
+    def _state_at_time(
+        self,
+        p: dict[str, float],
+        y0: np.ndarray,
+        t_start: float,
+        t_eval: float,
+        method: str,
+    ) -> np.ndarray:
+        """Return the state at one chosen time.
+
+        The matrix exponential is used for this constant linear system,
+        independently of the plotting integrator. This makes intensity
+        sweeps fast even for very large microwave mixing rates.
+        """
+        if t_eval <= t_start:
+            return y0.copy()
+
+        A = rate_matrix(p)
+        state = expm(A * float(t_eval - t_start)) @ y0
+        state[np.abs(state) < 1e-14] = 0.0
+        return state
+
+    def open_intensity_sweep_tool(self) -> None:
+        """Open a full-parameter intensity-sweep tool.
+
+        The sweep window contains the same physical parameters as the main
+        population window. The only parameter varied automatically is the
+        laser intensity.
+        """
+        try:
+            p_main, y0_main, t_start_main, t_end_main, _ = self._collect_parameters()
+        except Exception as exc:
+            messagebox.showerror("Parameter error", str(exc))
+            return
+
+        window = tk.Toplevel(self)
+        window.title("Laser-intensity sweep — ΔPL/PL")
+        window.geometry("1450x900")
+        window.minsize(1150, 720)
+
+        outer = ttk.Frame(window)
+        outer.pack(fill="both", expand=True)
+
+        # Scrollable parameter panel, matching the main application style.
+        controls_container = ttk.Frame(outer)
+        controls_container.pack(side="left", fill="y")
+
+        controls_canvas = tk.Canvas(
+            controls_container,
+            width=330,
+            highlightthickness=0,
+        )
+        controls_scrollbar = ttk.Scrollbar(
+            controls_container,
+            orient="vertical",
+            command=controls_canvas.yview,
+        )
+        controls_canvas.configure(yscrollcommand=controls_scrollbar.set)
+
+        controls_scrollbar.pack(side="right", fill="y")
+        controls_canvas.pack(side="left", fill="y", expand=False)
+
+        controls = ttk.Frame(controls_canvas, padding=8)
+        controls_window = controls_canvas.create_window(
+            (0, 0),
+            window=controls,
+            anchor="nw",
+        )
+
+        def update_scroll_region(_event=None):
+            controls_canvas.configure(scrollregion=controls_canvas.bbox("all"))
+
+        def resize_controls_width(event):
+            controls_canvas.itemconfigure(controls_window, width=event.width)
+
+        controls.bind("<Configure>", update_scroll_region)
+        controls_canvas.bind("<Configure>", resize_controls_width)
+
+        def on_mousewheel(event):
+            if event.delta:
+                controls_canvas.yview_scroll(int(-event.delta / 120), "units")
+            elif event.num == 4:
+                controls_canvas.yview_scroll(-1, "units")
+            elif event.num == 5:
+                controls_canvas.yview_scroll(1, "units")
+
+        def bind_mousewheel(_event):
+            controls_canvas.bind_all("<MouseWheel>", on_mousewheel)
+            controls_canvas.bind_all("<Button-4>", on_mousewheel)
+            controls_canvas.bind_all("<Button-5>", on_mousewheel)
+
+        def unbind_mousewheel(_event):
+            controls_canvas.unbind_all("<MouseWheel>")
+            controls_canvas.unbind_all("<Button-4>")
+            controls_canvas.unbind_all("<Button-5>")
+
+        controls_canvas.bind("<Enter>", bind_mousewheel)
+        controls_canvas.bind("<Leave>", unbind_mousewheel)
+
+        plot_frame = ttk.Frame(outer, padding=4)
+        plot_frame.pack(side="right", fill="both", expand=True)
+
+        fields: dict[str, tk.StringVar] = {}
+
+        def add_field(parent, row, label, key, default, unit="", width=14):
+            ttk.Label(parent, text=label).grid(
+                row=row, column=0, sticky="w", padx=4, pady=2
+            )
+            var = tk.StringVar(value=str(default))
+            fields[key] = var
+            ttk.Entry(parent, textvariable=var, width=width).grid(
+                row=row, column=1, padx=4, pady=2
+            )
+            ttk.Label(parent, text=unit).grid(
+                row=row, column=2, sticky="w", padx=4, pady=2
+            )
+
+        # Optical parameters
+        optical = ttk.LabelFrame(controls, text="Optical parameters", padding=6)
+        optical.pack(fill="x", pady=4)
+        add_field(optical, 0, "Cross section σ", "sigma", self.vars["sigma"].get(), "cm²")
+        add_field(optical, 1, "Laser wavelength λ", "wavelength_nm", self.vars["wavelength_nm"].get(), "nm")
+
+        # Intensity sweep settings
+        sweep = ttk.LabelFrame(controls, text="Intensity sweep", padding=6)
+        sweep.pack(fill="x", pady=4)
+        current_i = self._read_float("intensity")
+        add_field(sweep, 0, "Minimum intensity", "i_min", max(current_i / 100, 1e-9), "W/cm²")
+        add_field(sweep, 1, "Maximum intensity", "i_max", current_i * 10, "W/cm²")
+        add_field(sweep, 2, "Number of intensities", "n_i", 120, "")
+        add_field(sweep, 3, "Start time", "t_start", self.vars["t_start"].get(), "s")
+        add_field(sweep, 4, "Evaluation time", "eval_time", self.vars["t_end"].get(), "s")
+
+        log_i_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            sweep,
+            text="Logarithmic intensity axis",
+            variable=log_i_var,
+        ).grid(row=5, column=0, columnspan=3, sticky="w", padx=4, pady=3)
+
+        # Intrinsic rates
+        rates = ttk.LabelFrame(controls, text="Intrinsic rates", padding=6)
+        rates.pack(fill="x", pady=4)
+        rate_rows = [
+            ("k10", "k10"),
+            ("kISC", "kISC"),
+            ("kx", "kx"),
+            ("ky", "ky"),
+            ("kz", "kz"),
+            ("wxy", "wxy"),
+            ("wyx", "wyx"),
+            ("wxz", "wxz"),
+            ("wzx", "wzx"),
+            ("wyz", "wyz"),
+            ("wzy", "wzy"),
+        ]
+        for row, (label, key) in enumerate(rate_rows):
+            add_field(rates, row, label, key, self.vars[key].get(), "s⁻¹")
+
+        # Branching probabilities
+        probs = ttk.LabelFrame(controls, text="ISC branching probabilities", padding=6)
+        probs.pack(fill="x", pady=4)
+        add_field(probs, 0, "Px", "Px", self.vars["Px"].get())
+        add_field(probs, 1, "Py", "Py", self.vars["Py"].get())
+        add_field(probs, 2, "Pz", "Pz", self.vars["Pz"].get())
+
+        # Microwave drives
+        mw = ttk.LabelFrame(controls, text="Microwave drives", padding=6)
+        mw.pack(fill="x", pady=4)
+        ttk.Label(
+            mw,
+            text=(
+                "Driven calculation uses these Ω/2π values. "
+                "Control calculation uses Ω = 0 for all three pairs."
+            ),
+            wraplength=285,
+        ).grid(row=0, column=0, columnspan=3, sticky="w", padx=4, pady=(2, 6))
+        add_field(mw, 1, "Txy drive Ωxy/2π", "rabi_xy_mhz", self.vars["rabi_xy_mhz"].get(), "MHz")
+        add_field(mw, 2, "Txz drive Ωxz/2π", "rabi_xz_mhz", self.vars["rabi_xz_mhz"].get(), "MHz")
+        add_field(mw, 3, "Tyz drive Ωyz/2π", "rabi_yz_mhz", self.vars["rabi_yz_mhz"].get(), "MHz")
+
+        # Initial populations
+        initial = ttk.LabelFrame(controls, text="Initial populations", padding=6)
+        initial.pack(fill="x", pady=4)
+        ttk.Label(
+            initial,
+            text="These values are normalized automatically.",
+            wraplength=285,
+        ).grid(row=0, column=0, columnspan=3, sticky="w", padx=4, pady=(2, 6))
+        for row, (label, key) in enumerate(
+            [
+                ("Initial S0", "S0_0"),
+                ("Initial S1", "S1_0"),
+                ("Initial Tx", "Tx_0"),
+                ("Initial Ty", "Ty_0"),
+                ("Initial Tz", "Tz_0"),
+            ],
+            start=1,
+        ):
+            add_field(initial, row, label, key, self.vars[key].get())
+
+        # Plot options
+        plot_options = ttk.LabelFrame(controls, text="Plot options", padding=6)
+        plot_options.pack(fill="x", pady=4)
+        show_s1_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            plot_options,
+            text="Show S1 driven and control",
+            variable=show_s1_var,
+        ).pack(anchor="w", padx=4, pady=3)
+
+        # Result area
+        result_text = tk.Text(controls, width=39, height=15, wrap="word")
+        result_text.pack(fill="x", pady=6)
+
+        fig = plt.Figure(figsize=(9.0, 7.0))
+        ax = fig.add_subplot(111)
+        canvas = FigureCanvasTkAgg(fig, master=plot_frame)
+        canvas.get_tk_widget().pack(fill="both", expand=True)
+
+        last_sweep: dict[str, np.ndarray] = {}
+
+        def read_float(key: str) -> float:
+            try:
+                value = float(fields[key].get())
+            except ValueError as exc:
+                raise ValueError(f"Invalid numerical value for {key}") from exc
+            if not math.isfinite(value):
+                raise ValueError(f"{key} must be finite.")
+            return value
+
+        def collect_sweep_parameters():
+            sigma = read_float("sigma")
+            wavelength_nm = read_float("wavelength_nm")
+            if sigma < 0 or wavelength_nm <= 0:
+                raise ValueError("σ must be non-negative and λ must be positive.")
+
+            p = {}
+            for key in [
+                "k10", "kISC", "kx", "ky", "kz",
+                "wxy", "wyx", "wxz", "wzx", "wyz", "wzy",
+            ]:
+                p[key] = read_float(key)
+                if p[key] < 0:
+                    raise ValueError(f"{key} must be non-negative.")
+
+            for key in ["Px", "Py", "Pz"]:
+                p[key] = read_float(key)
+                if p[key] < 0:
+                    raise ValueError(f"{key} must be non-negative.")
+
+            prob_sum = p["Px"] + p["Py"] + p["Pz"]
+            if prob_sum <= 0:
+                raise ValueError("At least one of Px, Py or Pz must be positive.")
+            p["Px"] /= prob_sum
+            p["Py"] /= prob_sum
+            p["Pz"] /= prob_sum
+
+            for pair, key in [
+                ("xy", "rabi_xy_mhz"),
+                ("xz", "rabi_xz_mhz"),
+                ("yz", "rabi_yz_mhz"),
+            ]:
+                rabi_mhz = read_float(key)
+                if rabi_mhz < 0:
+                    raise ValueError(f"{key} must be non-negative.")
+                p[f"gamma_{pair}"] = 2.0 * math.pi * rabi_mhz * 1e6
+
+            y0 = np.array(
+                [
+                    read_float("S0_0"),
+                    read_float("S1_0"),
+                    read_float("Tx_0"),
+                    read_float("Ty_0"),
+                    read_float("Tz_0"),
+                ],
+                dtype=float,
+            )
+            if np.any(y0 < 0):
+                raise ValueError("Initial populations must be non-negative.")
+            total = y0.sum()
+            if total <= 0:
+                raise ValueError("At least one initial population must be positive.")
+            y0 /= total
+
+            i_min = read_float("i_min")
+            i_max = read_float("i_max")
+            n_i = int(read_float("n_i"))
+            t_start = read_float("t_start")
+            eval_time = read_float("eval_time")
+
+            if i_min < 0 or i_max <= i_min:
+                raise ValueError("Require 0 ≤ minimum intensity < maximum intensity.")
+            if n_i < 2:
+                raise ValueError("Use at least two intensity points.")
+            if t_start < 0:
+                raise ValueError("Start time must be non-negative.")
+            if eval_time < t_start:
+                raise ValueError("Evaluation time must be later than the start time.")
+
+            return p, y0, sigma, wavelength_nm, i_min, i_max, n_i, t_start, eval_time
+
+        def run_sweep():
+            try:
+                (
+                    p_base,
+                    y0,
+                    sigma,
+                    wavelength_nm,
+                    i_min,
+                    i_max,
+                    n_i,
+                    t_start,
+                    eval_time,
+                ) = collect_sweep_parameters()
+
+                if log_i_var.get():
+                    if i_min <= 0:
+                        raise ValueError(
+                            "Minimum intensity must be positive for a logarithmic sweep."
+                        )
+                    intensities = np.geomspace(i_min, i_max, n_i)
+                else:
+                    intensities = np.linspace(i_min, i_max, n_i)
+
+                photon_energy = H * C / (wavelength_nm * 1e-9)
+
+                contrast = np.empty(n_i)
+                s1_drive = np.empty(n_i)
+                s1_control = np.empty(n_i)
+
+                for idx, intensity in enumerate(intensities):
+                    p_drive = p_base.copy()
+                    p_drive["k01"] = sigma * intensity / photon_energy
+
+                    p_control = p_drive.copy()
+                    p_control["gamma_xy"] = 0.0
+                    p_control["gamma_xz"] = 0.0
+                    p_control["gamma_yz"] = 0.0
+
+                    y_drive = self._state_at_time(
+                        p_drive,
+                        y0,
+                        t_start,
+                        eval_time,
+                        "Matrix exponential",
+                    )
+                    y_control = self._state_at_time(
+                        p_control,
+                        y0,
+                        t_start,
+                        eval_time,
+                        "Matrix exponential",
+                    )
+
+                    s1_drive[idx] = y_drive[1]
+                    s1_control[idx] = y_control[1]
+
+                    if abs(s1_control[idx]) < 1e-30:
+                        contrast[idx] = np.nan
+                    else:
+                        contrast[idx] = (
+                            s1_drive[idx] - s1_control[idx]
+                        ) / s1_control[idx]
+
+                last_sweep.clear()
+                last_sweep.update(
+                    intensity=intensities,
+                    contrast=contrast,
+                    s1_drive=s1_drive,
+                    s1_control=s1_control,
+                )
+
+                ax.clear()
+                ax.plot(intensities, 100.0 * contrast, label="ΔPL/PL")
+
+                if log_i_var.get():
+                    ax.set_xscale("log")
+                else:
+                    ax.set_xscale("linear")
+
+                ax.set_xlabel("Laser intensity (W/cm²)")
+                ax.set_ylabel("ΔPL/PL (%)")
+                ax.grid(False)
+
+                if show_s1_var.get():
+                    ax2 = ax.twinx()
+                    ax2.plot(intensities, s1_drive, "--", label="S1 driven")
+                    ax2.plot(intensities, s1_control, ":", label="S1 control")
+                    ax2.set_ylabel("S1 population")
+                    lines1, labels1 = ax.get_legend_handles_labels()
+                    lines2, labels2 = ax2.get_legend_handles_labels()
+                    ax.legend(lines1 + lines2, labels1 + labels2)
+                else:
+                    ax.legend()
+
+                finite = np.isfinite(contrast)
+                result = [
+                    f"Start time: {t_start:.6e} s",
+                    f"Evaluation time: {eval_time:.6e} s",
+                    f"σ: {sigma:.6e} cm²",
+                    f"λ: {wavelength_nm:.6g} nm",
+                    "",
+                    f"Ωxy/2π: {read_float('rabi_xy_mhz'):.6g} MHz",
+                    f"Ωxz/2π: {read_float('rabi_xz_mhz'):.6g} MHz",
+                    f"Ωyz/2π: {read_float('rabi_yz_mhz'):.6g} MHz",
+                ]
+
+                if np.any(finite):
+                    imax = np.nanargmax(contrast)
+                    imin = np.nanargmin(contrast)
+                    result.extend(
+                        [
+                            "",
+                            "Largest positive contrast:",
+                            f"I = {intensities[imax]:.6e} W/cm²",
+                            f"ΔPL/PL = {100.0 * contrast[imax]:.6e} %",
+                            "",
+                            "Most negative contrast:",
+                            f"I = {intensities[imin]:.6e} W/cm²",
+                            f"ΔPL/PL = {100.0 * contrast[imin]:.6e} %",
+                        ]
+                    )
+                else:
+                    result.extend(
+                        [
+                            "",
+                            "S1(control) was zero or numerically negligible "
+                            "over the entire sweep."
+                        ]
+                    )
+
+                result_text.delete("1.0", tk.END)
+                result_text.insert(tk.END, "\n".join(result))
+
+                fig.tight_layout()
+                canvas.draw_idle()
+
+            except Exception as exc:
+                messagebox.showerror("Sweep error", str(exc), parent=window)
+
+        def export_sweep():
+            if not last_sweep:
+                messagebox.showwarning(
+                    "No sweep",
+                    "Run the intensity sweep first.",
+                    parent=window,
+                )
+                return
+
+            path = filedialog.asksaveasfilename(
+                parent=window,
+                title="Export intensity sweep",
+                defaultextension=".csv",
+                filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
+            )
+            if not path:
+                return
+
+            data = np.column_stack(
+                [
+                    last_sweep["intensity"],
+                    last_sweep["s1_control"],
+                    last_sweep["s1_drive"],
+                    last_sweep["contrast"],
+                ]
+            )
+            np.savetxt(
+                path,
+                data,
+                delimiter=",",
+                header="intensity_W_cm2,S1_control,S1_driven,deltaPL_over_PL",
+                comments="",
+            )
+
+        buttons = ttk.Frame(controls)
+        buttons.pack(fill="x", pady=8)
+        ttk.Button(
+            buttons,
+            text="Run intensity sweep",
+            command=run_sweep,
+        ).pack(side="left", padx=3)
+        ttk.Button(
+            buttons,
+            text="Export CSV",
+            command=export_sweep,
+        ).pack(side="left", padx=3)
+
+        window.bind("<Return>", lambda _event: run_sweep())
+        run_sweep()
 
     def export_csv(self) -> None:
         if self.last_data is None:
