@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 
@@ -273,12 +274,32 @@ class PopulationApp(tk.Tk):
             side="left", padx=3
         )
         ttk.Button(button_frame, text="Reset defaults", command=self.reset_defaults).pack(side="left", padx=3)
-        ttk.Button(button_frame, text="Export CSV", command=self.export_csv).pack(side="left", padx=3)
+        ttk.Button(
+            button_frame,
+            text="Export population PNG",
+            command=lambda: self.open_export_options("png"),
+        ).pack(side="left", padx=3)
+        ttk.Button(
+            button_frame,
+            text="Export population CSV",
+            command=lambda: self.open_export_options("csv"),
+        ).pack(side="left", padx=3)
+        ttk.Button(
+            controls,
+            text="Export population graph (combined PNG)",
+            command=self.open_population_graph_export,
+        ).pack(fill="x", pady=(0, 4))
 
         ttk.Button(
             controls,
             text="Open intensity sweep / ΔPL/PL tool",
             command=self.open_intensity_sweep_tool,
+        ).pack(fill="x", pady=(0, 4))
+
+        ttk.Button(
+            controls,
+            text="Open ΔPL/PL versus time tool",
+            command=self.open_contrast_time_tool,
         ).pack(fill="x", pady=(0, 8))
 
         stationary = ttk.LabelFrame(controls, text="Stationary populations", padding=6)
@@ -1115,55 +1136,524 @@ class PopulationApp(tk.Tk):
             except Exception as exc:
                 messagebox.showerror("Sweep error", str(exc), parent=window)
 
-        def export_sweep():
+        def export_sweep_csv():
             if not last_sweep:
-                messagebox.showwarning(
-                    "No sweep",
-                    "Run the intensity sweep first.",
-                    parent=window,
+                messagebox.showwarning("No sweep", "Run the intensity sweep first.", parent=window)
+                return
+            folder = filedialog.askdirectory(parent=window, title="Choose folder for intensity-sweep CSV files")
+            if not folder:
+                return
+            out = Path(folder)
+            curves = {
+                "deltaPL_over_PL": last_sweep["contrast"],
+                "S1_control": last_sweep["s1_control"],
+                "S1_driven": last_sweep["s1_drive"],
+            }
+            for name, values in curves.items():
+                np.savetxt(
+                    out / f"intensity_{name}.csv",
+                    np.column_stack([last_sweep["intensity"], values]),
+                    delimiter=",",
+                    header=f"intensity_W_cm2,{name}",
+                    comments="",
                 )
+            messagebox.showinfo("CSV export complete", f"Three separate CSV files saved in:\n{folder}", parent=window)
+
+        def export_sweep_png():
+            if not last_sweep:
+                messagebox.showwarning("No sweep", "Run the intensity sweep first.", parent=window)
+                return
+            folder = filedialog.askdirectory(parent=window, title="Choose folder for intensity-sweep PNG files")
+            if not folder:
+                return
+            out = Path(folder)
+            curves = [
+                ("deltaPL_over_PL", 100.0 * last_sweep["contrast"], "ΔPL/PL (%)"),
+                ("S1_control", last_sweep["s1_control"], "S1 population"),
+                ("S1_driven", last_sweep["s1_drive"], "S1 population"),
+            ]
+            for name, values, ylabel in curves:
+                export_fig, export_ax = plt.subplots(figsize=(9, 6))
+                export_ax.plot(last_sweep["intensity"], values, label=name.replace("_", " "))
+                export_ax.set_xscale("log" if log_i_var.get() else "linear")
+                export_ax.set_xlabel("Laser intensity (W/cm²)")
+                export_ax.set_ylabel(ylabel)
+                export_ax.set_title(name.replace("_", " "))
+                export_ax.grid(False)
+                export_ax.legend()
+                export_fig.tight_layout()
+                export_fig.savefig(out / f"intensity_{name}.png", dpi=300, bbox_inches="tight")
+                plt.close(export_fig)
+            messagebox.showinfo("PNG export complete", f"Three separate PNG files saved in:\n{folder}", parent=window)
+
+        def export_delta_intensity_graph():
+            if not last_sweep:
+                messagebox.showwarning("No sweep", "Run the intensity sweep first.", parent=window)
                 return
 
-            path = filedialog.asksaveasfilename(
-                parent=window,
-                title="Export intensity sweep",
-                defaultextension=".csv",
-                filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
-            )
-            if not path:
-                return
+            options = tk.Toplevel(window)
+            options.title("ΔPL/PL graph export options")
+            options.transient(window)
+            options.resizable(False, False)
+            frame = ttk.Frame(options, padding=12)
+            frame.pack(fill="both", expand=True)
 
-            data = np.column_stack(
-                [
-                    last_sweep["intensity"],
-                    last_sweep["s1_control"],
-                    last_sweep["s1_drive"],
-                    last_sweep["contrast"],
-                ]
+            fields = [
+                ("Graph title", export_title_var),
+                ("Title font size", export_title_size_var),
+                ("Axis-title font size", export_axis_size_var),
+                ("Tick-label font size", export_tick_size_var),
+                ("Legend font size", export_legend_size_var),
+                ("PNG resolution (dpi)", export_dpi_var),
+            ]
+            for row, (label, var) in enumerate(fields):
+                ttk.Label(frame, text=label).grid(row=row, column=0, sticky="w", padx=4, pady=4)
+                ttk.Entry(frame, textvariable=var, width=42 if row == 0 else 12).grid(
+                    row=row, column=1, sticky="ew", padx=4, pady=4
+                )
+
+            def save_graph():
+                try:
+                    title_size = float(export_title_size_var.get())
+                    axis_size = float(export_axis_size_var.get())
+                    tick_size = float(export_tick_size_var.get())
+                    legend_size = float(export_legend_size_var.get())
+                    dpi = int(float(export_dpi_var.get()))
+                    if min(title_size, axis_size, tick_size, legend_size, dpi) <= 0:
+                        raise ValueError("All font sizes and the DPI must be positive.")
+                    path = filedialog.asksaveasfilename(
+                        parent=options,
+                        title="Export ΔPL/PL intensity graph",
+                        defaultextension=".png",
+                        filetypes=[("PNG files", "*.png"), ("All files", "*.*")],
+                        initialfile="deltaPL_over_PL_vs_intensity.png",
+                    )
+                    if not path:
+                        return
+                    export_fig, export_ax = plt.subplots(figsize=(10, 7))
+                    export_ax.plot(
+                        last_sweep["intensity"],
+                        100.0 * last_sweep["contrast"],
+                        label="ΔPL/PL",
+                    )
+                    export_ax.axhline(0.0, linewidth=0.8)
+                    export_ax.set_xscale("log" if log_i_var.get() else "linear")
+                    export_ax.set_xlabel("Laser intensity (W/cm²)", fontsize=axis_size)
+                    export_ax.set_ylabel("ΔPL/PL (%)", fontsize=axis_size)
+                    graph_title = export_title_var.get().strip()
+                    if graph_title:
+                        export_ax.set_title(graph_title, fontsize=title_size)
+                    export_ax.tick_params(axis="both", labelsize=tick_size)
+                    export_ax.legend(fontsize=legend_size)
+                    export_ax.grid(False)
+                    export_fig.tight_layout()
+                    export_fig.savefig(path, dpi=dpi, bbox_inches="tight")
+                    plt.close(export_fig)
+                    messagebox.showinfo("PNG export complete", f"Saved:\n{path}", parent=options)
+                    options.destroy()
+                except Exception as exc:
+                    messagebox.showerror("Export error", str(exc), parent=options)
+
+            ttk.Button(frame, text="Choose file and export graph", command=save_graph).grid(
+                row=len(fields), column=0, columnspan=2, sticky="ew", padx=4, pady=(10, 2)
             )
-            np.savetxt(
-                path,
-                data,
-                delimiter=",",
-                header="intensity_W_cm2,S1_control,S1_driven,deltaPL_over_PL",
-                comments="",
-            )
+            frame.columnconfigure(1, weight=1)
 
         buttons = ttk.Frame(controls)
         buttons.pack(fill="x", pady=8)
-        ttk.Button(
-            buttons,
-            text="Run intensity sweep",
-            command=run_sweep,
-        ).pack(side="left", padx=3)
-        ttk.Button(
-            buttons,
-            text="Export CSV",
-            command=export_sweep,
-        ).pack(side="left", padx=3)
+        ttk.Button(buttons, text="Run intensity sweep", command=run_sweep).pack(side="left", padx=3)
+        ttk.Button(buttons, text="Export ΔPL/PL graph", command=export_delta_intensity_graph).pack(side="left", padx=3)
+        ttk.Button(buttons, text="Export PNG curves", command=export_sweep_png).pack(side="left", padx=3)
+        ttk.Button(buttons, text="Export CSV curves", command=export_sweep_csv).pack(side="left", padx=3)
 
         window.bind("<Return>", lambda _event: run_sweep())
         run_sweep()
+
+
+    def open_export_options(self, export_format: str) -> None:
+        """Export each selected population curve separately as PNG or CSV."""
+        if self.last_data is None:
+            messagebox.showwarning("No data", "Run a simulation first.")
+            return
+
+        window = tk.Toplevel(self)
+        window.title(f"Population {export_format.upper()} export options")
+        window.transient(self)
+        window.resizable(False, False)
+
+        frame = ttk.Frame(window, padding=12)
+        frame.pack(fill="both", expand=True)
+
+        title_var = tk.StringVar(value="Population dynamics from Eq. (2)")
+        title_size_var = tk.StringVar(value="18")
+        axis_size_var = tk.StringVar(value="16")
+        tick_size_var = tk.StringVar(value="12")
+        legend_size_var = tk.StringVar(value="12")
+        dpi_var = tk.StringVar(value="300")
+
+        fields = [
+            ("Graph title", title_var),
+            ("Title font size", title_size_var),
+            ("Axis-title font size", axis_size_var),
+            ("Tick-label font size", tick_size_var),
+            ("Legend font size", legend_size_var),
+            ("PNG resolution (dpi)", dpi_var),
+        ]
+        for row, (label, var) in enumerate(fields):
+            ttk.Label(frame, text=label).grid(row=row, column=0, sticky="w", padx=4, pady=4)
+            ttk.Entry(frame, textvariable=var, width=35 if row == 0 else 12).grid(
+                row=row, column=1, sticky="ew", padx=4, pady=4
+            )
+
+        ttk.Label(
+            frame,
+            text=(f"Each selected population curve will be exported as its own "
+                  f"{export_format.upper()} file. PNG and CSV exports are intentionally separate."),
+            wraplength=430,
+        ).grid(row=len(fields), column=0, columnspan=2, sticky="w", padx=4, pady=(8, 4))
+
+        def do_export():
+            try:
+                title_size = float(title_size_var.get())
+                axis_size = float(axis_size_var.get())
+                tick_size = float(tick_size_var.get())
+                legend_size = float(legend_size_var.get())
+                dpi = int(float(dpi_var.get()))
+                if min(title_size, axis_size, tick_size, legend_size, dpi) <= 0:
+                    raise ValueError("All font sizes and the DPI must be positive.")
+
+                folder = filedialog.askdirectory(parent=window, title=f"Choose folder for {export_format.upper()} files")
+                if not folder:
+                    return
+                t, y = self.last_data
+                curves = {
+                    "S0": y[0], "S1": y[1], "Tx": y[2], "Ty": y[3], "Tz": y[4],
+                    "T1_total": y[2] + y[3] + y[4],
+                }
+                selected = {
+                    key: values for key, values in curves.items()
+                    if self.plot_vars["T1 total" if key == "T1_total" else key].get()
+                }
+                if not selected:
+                    raise ValueError("Select at least one population curve before exporting.")
+                out = Path(folder)
+                for name, values in selected.items():
+                    if export_format == "csv":
+                        np.savetxt(
+                            out / f"population_{name}.csv",
+                            np.column_stack([t, values]),
+                            delimiter=",",
+                            header=f"time_s,{name}",
+                            comments="",
+                        )
+                    elif export_format == "png":
+                        export_fig, export_ax = plt.subplots(figsize=(9, 6))
+                        export_ax.plot(t, values, label=name.replace("_", " "))
+                        export_ax.set_xscale("log" if self.log_time_var.get() and np.all(t > 0) else "linear")
+                        export_ax.set_xlabel("Time (s)", fontsize=axis_size)
+                        export_ax.set_ylabel("Population", fontsize=axis_size)
+                        graph_title = title_var.get().strip()
+                        if graph_title:
+                            export_ax.set_title(f"{graph_title} — {name.replace('_', ' ')}", fontsize=title_size)
+                        export_ax.tick_params(axis="both", labelsize=tick_size)
+                        export_ax.legend(fontsize=legend_size)
+                        export_ax.grid(False)
+                        export_fig.tight_layout()
+                        export_fig.savefig(out / f"population_{name}.png", dpi=dpi, bbox_inches="tight")
+                        plt.close(export_fig)
+                    else:
+                        raise ValueError("Unknown export format.")
+                messagebox.showinfo(
+                    "Export complete",
+                    f"{len(selected)} separate {export_format.upper()} file(s) saved in:\n{folder}",
+                    parent=window,
+                )
+                window.destroy()
+            except Exception as exc:
+                messagebox.showerror("Export error", str(exc), parent=window)
+
+        ttk.Button(frame, text=f"Choose folder and export {export_format.upper()}", command=do_export).grid(
+            row=len(fields)+1, column=0, columnspan=2, sticky="ew", padx=4, pady=(10, 2)
+        )
+        frame.columnconfigure(1, weight=1)
+
+    def open_population_graph_export(self) -> None:
+        """Export one combined PNG containing all currently selected population curves."""
+        if self.last_data is None:
+            messagebox.showwarning("No data", "Run a simulation first.")
+            return
+
+        window = tk.Toplevel(self)
+        window.title("Population graph export")
+        window.transient(self)
+        window.resizable(False, False)
+
+        frame = ttk.Frame(window, padding=12)
+        frame.pack(fill="both", expand=True)
+
+        title_var = tk.StringVar(value="Évolution des Populations des Niveaux dans le Temps")
+        title_size_var = tk.StringVar(value="18")
+        axis_size_var = tk.StringVar(value="16")
+        tick_size_var = tk.StringVar(value="12")
+        legend_size_var = tk.StringVar(value="12")
+        dpi_var = tk.StringVar(value="300")
+
+        fields = [
+            ("Graph title", title_var),
+            ("Title font size", title_size_var),
+            ("Axis-title font size", axis_size_var),
+            ("Tick-label font size", tick_size_var),
+            ("Legend font size", legend_size_var),
+            ("PNG resolution (dpi)", dpi_var),
+        ]
+        for row, (label, var) in enumerate(fields):
+            ttk.Label(frame, text=label).grid(row=row, column=0, sticky="w", padx=4, pady=4)
+            ttk.Entry(frame, textvariable=var, width=48 if row == 0 else 12).grid(
+                row=row, column=1, sticky="ew", padx=4, pady=4
+            )
+
+        ttk.Label(
+            frame,
+            text="The exported graph contains all population curves currently selected in the main window.",
+            wraplength=470,
+        ).grid(row=len(fields), column=0, columnspan=2, sticky="w", padx=4, pady=(8, 4))
+
+        def export_graph():
+            try:
+                title_size = float(title_size_var.get())
+                axis_size = float(axis_size_var.get())
+                tick_size = float(tick_size_var.get())
+                legend_size = float(legend_size_var.get())
+                dpi = int(float(dpi_var.get()))
+                if min(title_size, axis_size, tick_size, legend_size, dpi) <= 0:
+                    raise ValueError("All font sizes and the DPI must be positive.")
+
+                path = filedialog.asksaveasfilename(
+                    parent=window,
+                    title="Export population graph",
+                    defaultextension=".png",
+                    filetypes=[("PNG files", "*.png"), ("All files", "*.*")],
+                    initialfile="population_dynamics.png",
+                )
+                if not path:
+                    return
+
+                t, y = self.last_data
+                curves = {
+                    "S0": y[0],
+                    "S1": y[1],
+                    "Tx": y[2],
+                    "Ty": y[3],
+                    "Tz": y[4],
+                    "T1 total": y[2] + y[3] + y[4],
+                }
+                selected = [(name, values) for name, values in curves.items() if self.plot_vars[name].get()]
+                if not selected:
+                    raise ValueError("Select at least one population curve before exporting.")
+
+                export_fig, export_ax = plt.subplots(figsize=(10, 7))
+                for name, values in selected:
+                    if name == "T1 total":
+                        export_ax.plot(t, values, "--", linewidth=2, label="T1 = Tx + Ty + Tz")
+                    else:
+                        export_ax.plot(t, values, label=name)
+
+                export_ax.set_xscale(
+                    "log" if self.log_time_var.get() and np.all(t > 0) else "linear"
+                )
+                export_ax.set_xlabel("Time (s)", fontsize=axis_size)
+                export_ax.set_ylabel("Population", fontsize=axis_size)
+                graph_title = title_var.get().strip()
+                if graph_title:
+                    export_ax.set_title(graph_title, fontsize=title_size)
+                export_ax.tick_params(axis="both", labelsize=tick_size)
+                export_ax.legend(fontsize=legend_size)
+                export_ax.grid(False)
+                export_fig.tight_layout()
+                export_fig.savefig(path, dpi=dpi, bbox_inches="tight")
+                plt.close(export_fig)
+                messagebox.showinfo("PNG export complete", f"Saved:\n{path}", parent=window)
+                window.destroy()
+            except Exception as exc:
+                messagebox.showerror("Export error", str(exc), parent=window)
+
+        ttk.Button(frame, text="Choose file and export combined PNG", command=export_graph).grid(
+            row=len(fields) + 1, column=0, columnspan=2, sticky="ew", padx=4, pady=(10, 2)
+        )
+        frame.columnconfigure(1, weight=1)
+
+    def open_contrast_time_tool(self) -> None:
+        """Plot transient ΔPL/PL using the same parameters as the population tool.
+
+        The driven trace uses the current microwave rates. The control trace uses
+        the same parameters with all microwave drives set to zero.
+        """
+        try:
+            p, y0, t_start, t_end, n_points = self._collect_parameters()
+        except Exception as exc:
+            messagebox.showerror("Parameter error", str(exc))
+            return
+
+        window = tk.Toplevel(self)
+        window.title("Transient ΔPL/PL")
+        window.geometry("1100x760")
+
+        top = ttk.Frame(window, padding=8)
+        top.pack(fill="x")
+        title_var = tk.StringVar(value="Transient ODMR contrast")
+        title_size_var = tk.StringVar(value="18")
+        axis_size_var = tk.StringVar(value="16")
+        tick_size_var = tk.StringVar(value="12")
+        legend_size_var = tk.StringVar(value="12")
+        dpi_var = tk.StringVar(value="300")
+        ttk.Label(top, text="Title").grid(row=0, column=0, padx=4, pady=3)
+        ttk.Entry(top, textvariable=title_var, width=32).grid(row=0, column=1, padx=4, pady=3)
+        ttk.Label(top, text="Title size").grid(row=0, column=2, padx=4, pady=3)
+        ttk.Entry(top, textvariable=title_size_var, width=7).grid(row=0, column=3, padx=4, pady=3)
+        ttk.Label(top, text="Axis-title size").grid(row=0, column=4, padx=4, pady=3)
+        ttk.Entry(top, textvariable=axis_size_var, width=7).grid(row=0, column=5, padx=4, pady=3)
+        ttk.Label(top, text="Tick size").grid(row=0, column=6, padx=4, pady=3)
+        ttk.Entry(top, textvariable=tick_size_var, width=7).grid(row=0, column=7, padx=4, pady=3)
+        ttk.Label(top, text="Legend size").grid(row=0, column=8, padx=4, pady=3)
+        ttk.Entry(top, textvariable=legend_size_var, width=7).grid(row=0, column=9, padx=4, pady=3)
+
+        fig, ax = plt.subplots(figsize=(9, 6))
+        canvas = FigureCanvasTkAgg(fig, master=window)
+        canvas.get_tk_widget().pack(fill="both", expand=True, padx=8, pady=4)
+        last = {}
+
+        def calculate():
+            try:
+                p_now, y0_now, t0, t1, points = self._collect_parameters()
+                times = np.geomspace(t0, t1, points) if self.log_time_var.get() and t0 > 0 else np.linspace(t0, t1, points)
+                p_control = p_now.copy()
+                p_control["gamma_xy"] = p_control["gamma_xz"] = p_control["gamma_yz"] = 0.0
+                driven = self.propagate_linear_system(rate_matrix(p_now), y0_now, times, t0)
+                control = self.propagate_linear_system(rate_matrix(p_control), y0_now, times, t0)
+                denom = control[1]
+                contrast = np.full_like(denom, np.nan, dtype=float)
+                valid = np.abs(denom) > 1e-30
+                contrast[valid] = (driven[1, valid] - denom[valid]) / denom[valid]
+                last.clear()
+                last.update(time=times, contrast=contrast, s1_driven=driven[1], s1_control=control[1])
+
+                ax.clear()
+                ax.plot(times, 100.0 * contrast, label="ΔPL/PL")
+                ax.axhline(0.0, linewidth=0.8)
+                ax.set_xscale("log" if self.log_time_var.get() and np.all(times > 0) else "linear")
+                ax.set_xlabel("Time (s)", fontsize=float(axis_size_var.get()))
+                ax.set_ylabel("ΔPL/PL (%)", fontsize=float(axis_size_var.get()))
+                if title_var.get().strip():
+                    ax.set_title(title_var.get().strip(), fontsize=float(title_size_var.get()))
+                ax.tick_params(axis="both", labelsize=float(tick_size_var.get()))
+                ax.grid(False)
+                ax.legend(fontsize=float(legend_size_var.get()))
+                fig.tight_layout()
+                canvas.draw_idle()
+            except Exception as exc:
+                messagebox.showerror("ΔPL/PL error", str(exc), parent=window)
+
+        def export_delta_time_graph():
+            if not last:
+                messagebox.showwarning("No data", "Calculate the curves first.", parent=window)
+                return
+            try:
+                title_size = float(title_size_var.get())
+                axis_size = float(axis_size_var.get())
+                tick_size = float(tick_size_var.get())
+                legend_size = float(legend_size_var.get())
+                dpi = int(float(dpi_var.get()))
+                if min(title_size, axis_size, tick_size, legend_size, dpi) <= 0:
+                    raise ValueError("All font sizes and the DPI must be positive.")
+                path = filedialog.asksaveasfilename(
+                    parent=window,
+                    title="Export ΔPL/PL time graph",
+                    defaultextension=".png",
+                    filetypes=[("PNG files", "*.png"), ("All files", "*.*")],
+                    initialfile="deltaPL_over_PL_vs_time.png",
+                )
+                if not path:
+                    return
+                export_fig, export_ax = plt.subplots(figsize=(10, 7))
+                export_ax.plot(last["time"], 100.0 * last["contrast"], label="ΔPL/PL")
+                export_ax.axhline(0.0, linewidth=0.8)
+                export_ax.set_xscale(
+                    "log" if self.log_time_var.get() and np.all(last["time"] > 0) else "linear"
+                )
+                export_ax.set_xlabel("Time (s)", fontsize=axis_size)
+                export_ax.set_ylabel("ΔPL/PL (%)", fontsize=axis_size)
+                graph_title = title_var.get().strip()
+                if graph_title:
+                    export_ax.set_title(graph_title, fontsize=title_size)
+                export_ax.tick_params(axis="both", labelsize=tick_size)
+                export_ax.legend(fontsize=legend_size)
+                export_ax.grid(False)
+                export_fig.tight_layout()
+                export_fig.savefig(path, dpi=dpi, bbox_inches="tight")
+                plt.close(export_fig)
+                messagebox.showinfo("PNG export complete", f"Saved:\n{path}", parent=window)
+            except Exception as exc:
+                messagebox.showerror("Export error", str(exc), parent=window)
+
+        def export_time_csv():
+            if not last:
+                messagebox.showwarning("No data", "Calculate the curves first.", parent=window)
+                return
+            folder = filedialog.askdirectory(parent=window, title="Choose folder for transient CSV files")
+            if not folder:
+                return
+            out = Path(folder)
+            curves = {
+                "deltaPL_over_PL": last["contrast"],
+                "S1_control": last["s1_control"],
+                "S1_driven": last["s1_driven"],
+            }
+            for name, values in curves.items():
+                np.savetxt(
+                    out / f"time_{name}.csv",
+                    np.column_stack([last["time"], values]),
+                    delimiter=",",
+                    header=f"time_s,{name}",
+                    comments="",
+                )
+            messagebox.showinfo("CSV export complete", f"Three separate CSV files saved in:\n{folder}", parent=window)
+
+        def export_time_png():
+            if not last:
+                messagebox.showwarning("No data", "Calculate the curves first.", parent=window)
+                return
+            folder = filedialog.askdirectory(parent=window, title="Choose folder for transient PNG files")
+            if not folder:
+                return
+            out = Path(folder)
+            curves = [
+                ("deltaPL_over_PL", 100.0 * last["contrast"], "ΔPL/PL (%)"),
+                ("S1_control", last["s1_control"], "S1 population"),
+                ("S1_driven", last["s1_driven"], "S1 population"),
+            ]
+            for name, values, ylabel in curves:
+                export_fig, export_ax = plt.subplots(figsize=(9, 6))
+                export_ax.plot(last["time"], values, label=name.replace("_", " "))
+                export_ax.set_xscale("log" if self.log_time_var.get() and np.all(last["time"] > 0) else "linear")
+                export_ax.set_xlabel("Time (s)", fontsize=float(axis_size_var.get()))
+                export_ax.set_ylabel(ylabel, fontsize=float(axis_size_var.get()))
+                graph_title = title_var.get().strip()
+                if graph_title:
+                    export_ax.set_title(f"{graph_title} — {name.replace('_', ' ')}", fontsize=float(title_size_var.get()))
+                export_ax.grid(False)
+                export_ax.legend()
+                export_fig.tight_layout()
+                export_fig.savefig(out / f"time_{name}.png", dpi=300, bbox_inches="tight")
+                plt.close(export_fig)
+            messagebox.showinfo("PNG export complete", f"Three separate PNG files saved in:\n{folder}", parent=window)
+
+        ttk.Label(top, text="PNG dpi").grid(row=1, column=8, padx=4, pady=3)
+        ttk.Entry(top, textvariable=dpi_var, width=7).grid(row=1, column=9, padx=4, pady=3)
+        ttk.Button(top, text="Recalculate from main parameters", command=calculate).grid(row=1, column=0, columnspan=2, sticky="ew", padx=4, pady=5)
+        ttk.Button(top, text="Export ΔPL/PL graph", command=export_delta_time_graph).grid(row=1, column=2, columnspan=2, sticky="ew", padx=4, pady=5)
+        ttk.Button(top, text="Export PNG curves", command=export_time_png).grid(row=1, column=4, columnspan=2, sticky="ew", padx=4, pady=5)
+        ttk.Button(top, text="Export CSV curves", command=export_time_csv).grid(row=1, column=6, columnspan=2, sticky="ew", padx=4, pady=5)
+        calculate()
 
     def export_csv(self) -> None:
         if self.last_data is None:
